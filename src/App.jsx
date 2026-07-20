@@ -57,19 +57,30 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch entries when session or userId changes
+  // Fetch entries and subscribe to Realtime cloud updates across devices
   useEffect(() => {
     if (loadingAuth) return;
 
     let isMounted = true;
-    storage.getAllEntries(userId).then((fetchedEntries) => {
-      if (isMounted) {
-        setEntries(fetchedEntries);
-      }
+
+    const loadEntries = () => {
+      storage.getAllEntries(userId).then((fetchedEntries) => {
+        if (isMounted) {
+          setEntries(fetchedEntries);
+        }
+      });
+    };
+
+    loadEntries();
+
+    // Subscribe to Realtime postgres changes for multi-device sync
+    const unsubscribe = storage.subscribeToChanges(userId, () => {
+      loadEntries();
     });
 
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, [userId, loadingAuth]);
 
