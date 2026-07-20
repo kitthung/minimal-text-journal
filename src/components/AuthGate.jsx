@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { BookOpen, KeyRound, Mail, ArrowRight, Loader2 } from 'lucide-react';
-import { supabase } from '../services/supabaseClient';
+import { BookOpen, KeyRound, Mail, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 export default function AuthGate() {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(true); // Default to Sign Up for new users
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,9 +25,9 @@ export default function AuthGate() {
         if (error) throw error;
         
         if (data.session) {
-          setSuccessMsg('Account created successfully!');
+          setSuccessMsg('Account created successfully! Welcome to your journal.');
         } else {
-          setSuccessMsg('Check your email for the confirmation link!');
+          setSuccessMsg('Account registered! Please check your email for the confirmation link.');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -42,6 +42,33 @@ export default function AuthGate() {
       setLoading(false);
     }
   };
+
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="app-container flex flex-col justify-center items-center py-12 fade-in" style={{ minHeight: '80vh' }}>
+        <div 
+          style={{
+            width: '100%',
+            maxWidth: '440px',
+            backgroundColor: 'var(--card-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '12px',
+            padding: '2.5rem 2rem',
+            textAlign: 'center',
+            boxShadow: '0 8px 24px var(--shadow-color)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', color: '#e67e22' }}>
+            <AlertCircle className="w-10 h-10" />
+          </div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>Supabase Keys Required</h2>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+            To enable user registration and cloud sync, please configure <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in your environment variables.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container flex flex-col justify-center items-center py-12 fade-in" style={{ minHeight: '80vh' }}>
@@ -63,7 +90,7 @@ export default function AuthGate() {
             <span className="brand-cursor"></span>
           </div>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            {isSignUp ? 'Create your minimalist journal account' : 'Sign in to access your synchronized journal'}
+            {isSignUp ? 'Create your minimalist journal account' : 'Sign in to access your journal'}
           </p>
         </div>
 

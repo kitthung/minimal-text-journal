@@ -139,8 +139,8 @@ export default function App() {
     );
   }
 
-  // Render Auth Gate if Supabase is configured and no active user session
-  if (isSupabaseConfigured && !session) {
+  // Render Auth Gate if no active user session
+  if (!session) {
     return <AuthGate />;
   }
 
