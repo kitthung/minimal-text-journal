@@ -7,16 +7,15 @@ import SearchBox from './components/SearchBox';
 import EntryList from './components/EntryList';
 import Editor from './components/Editor';
 import AuthGate from './components/AuthGate';
-import ProfileModal from './components/ProfileModal';
+import ProfileView from './components/ProfileView';
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(isSupabaseConfigured);
   const [entries, setEntries] = useState([]);
-  const [currentView, setCurrentView] = useState('home'); // 'home' | 'edit'
+  const [currentView, setCurrentView] = useState('home'); // 'home' | 'edit' | 'profile'
   const [activeEntryId, setActiveEntryId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const userId = session?.user?.id || null;
 
@@ -64,7 +63,10 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = async () => {
       const hash = window.location.hash;
-      if (hash.startsWith('#/edit/')) {
+      if (hash === '#/profile') {
+        setActiveEntryId(null);
+        setCurrentView('profile');
+      } else if (hash.startsWith('#/edit/')) {
         const id = hash.replace('#/edit/', '');
         const entryExists = await storage.getEntryById(id, userId);
         if (entryExists || id === 'new') {
@@ -125,6 +127,10 @@ export default function App() {
     window.location.hash = '#/';
   };
 
+  const handleGoToProfile = () => {
+    window.location.hash = '#/profile';
+  };
+
   const handleSignOut = async () => {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
@@ -172,10 +178,10 @@ export default function App() {
 
             {session && (
               <button
-                onClick={() => setShowProfileModal(true)}
+                onClick={handleGoToProfile}
                 className="btn-icon"
                 aria-label="Account profile settings"
-                title={`Profile Settings (${session.user.email})`}
+                title={`Account Profile (${session.user.email})`}
               >
                 <User className="w-4 h-4" />
               </button>
@@ -207,6 +213,12 @@ export default function App() {
               onSelectEntry={handleSelectEntry} 
             />
           </div>
+        ) : currentView === 'profile' ? (
+          <ProfileView 
+            user={session.user} 
+            onBack={handleBackToTimeline} 
+            onSignOut={handleSignOut} 
+          />
         ) : (
           activeEntry && (
             <Editor 
@@ -229,14 +241,6 @@ export default function App() {
         >
           <Plus className="w-6 h-6" />
         </button>
-      )}
-
-      {/* User Profile Modal */}
-      {showProfileModal && (
-        <ProfileModal 
-          user={session.user} 
-          onClose={() => setShowProfileModal(false)} 
-        />
       )}
     </>
   );
