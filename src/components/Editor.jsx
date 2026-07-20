@@ -105,6 +105,13 @@ export default function Editor({ entry, onSave, onDelete, onBack }) {
     }
   }, [entry.id]);
 
+  // Sync innerHTML when returning to Edit Mode from Preview Mode
+  useEffect(() => {
+    if (!previewMode && editorRef.current) {
+      editorRef.current.innerHTML = markdownToHtml(content);
+    }
+  }, [previewMode]);
+
   // Debounced auto-save loop
   useEffect(() => {
     if (isInitialMount.current) {
@@ -258,21 +265,26 @@ export default function Editor({ entry, onSave, onDelete, onBack }) {
       )}
 
       <div className="workspace-container">
-        {previewMode ? (
+        <div
+          ref={editorRef}
+          contentEditable={!previewMode}
+          onInput={triggerChange}
+          onKeyDown={handleKeyDown}
+          className="textarea-field custom-scrollbar"
+          placeholder="Start writing your thoughts here..."
+          aria-label="Journal entry content"
+          style={{
+            display: previewMode ? 'none' : 'block',
+            minHeight: '100%',
+            outline: 'none'
+          }}
+        />
+
+        {previewMode && (
           <div 
             className="markdown-preview custom-scrollbar"
+            style={{ display: 'block' }}
             dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }}
-          />
-        ) : (
-          <div
-            ref={editorRef}
-            contentEditable={true}
-            onInput={triggerChange}
-            onKeyDown={handleKeyDown}
-            className="textarea-field custom-scrollbar"
-            placeholder="Start writing your thoughts here..."
-            aria-label="Journal entry content"
-            style={{ minHeight: '100%', outline: 'none' }}
           />
         )}
       </div>
