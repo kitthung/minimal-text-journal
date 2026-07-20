@@ -2,6 +2,15 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const STORAGE_KEY = 'minimalist_journal_entries';
 
+// Helper to ensure all entry IDs are strictly valid v4 UUIDs required by PostgreSQL
+export const ensureValidUUID = (id) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (id && uuidRegex.test(id)) {
+    return id;
+  }
+  return crypto.randomUUID();
+};
+
 export const getFormattedDateTime = (date = new Date()) => {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -26,7 +35,7 @@ export const formatAccessibleDate = (isoString) => {
 
 const DEFAULT_ENTRIES = [
   {
-    id: 'sample-entry-1',
+    id: 'e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c',
     title: 'Welcome to Your Journal',
     content: `# Minimalist Text Journal
 
@@ -50,7 +59,7 @@ export const storage = {
   async getAllEntries(userId = null) {
     if (isSupabaseConfigured && userId) {
       try {
-        // 1. Sync any offline/local entries to cloud first
+        // 1. Sync any local entries to cloud first
         await this.syncLocalEntriesToCloud(userId);
 
         // 2. Fetch fresh entries from Supabase Cloud
@@ -61,7 +70,7 @@ export const storage = {
           .order('last_edited_at', { ascending: false });
 
         if (error) {
-          console.error('Supabase fetch entries error:', error);
+          console.error('Supabase fetch entries error:', error.message, error.details);
           return this.getLocalEntries();
         }
 
@@ -74,7 +83,7 @@ export const storage = {
           lastEditedAt: row.last_edited_at
         }));
 
-        // Update local cache for offline reading capability
+        // Mirror cloud entries into local cache for offline reading capability
         if (cloudEntries.length > 0) {
           this.saveAllLocalEntries(cloudEntries);
         }
@@ -97,12 +106,13 @@ export const storage = {
 
     try {
       const localEntries = this.getLocalEntries();
-      const entriesToUpload = localEntries.filter(e => e.id !== 'sample-entry-1');
+      // Filter out default sample entry if cloud sync is active
+      const entriesToUpload = localEntries.filter(e => e.id !== 'e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c' && e.id !== 'sample-entry-1');
 
       if (entriesToUpload.length === 0) return;
 
       const payloads = entriesToUpload.map(e => ({
-        id: e.id,
+        id: ensureValidUUID(e.id),
         user_id: userId,
         title: e.title,
         content: e.content,
@@ -112,7 +122,7 @@ export const storage = {
 
       const { error } = await supabase.from('entries').upsert(payloads);
       if (error) {
-        console.error('Error uploading local entries to cloud:', error);
+        console.error('Error uploading local entries to cloud:', error.message, error.details);
       }
     } catch (err) {
       console.error('Failed syncing local entries to cloud:', err);
@@ -123,12 +133,14 @@ export const storage = {
    * Fetch a single entry by ID.
    */
   async getEntryById(id, userId = null) {
+    const validId = ensureValidUUID(id);
+
     if (isSupabaseConfigured && userId) {
       try {
         const { data, error } = await supabase
           .from('entries')
           .select('*')
-          .eq('id', id)
+          .eq('id', validId)
           .eq('user_id', userId)
           .maybeSingle();
 
@@ -148,7 +160,7 @@ export const storage = {
     }
 
     const localEntries = this.getLocalEntries();
-    return localEntries.find(entry => entry.id === id) || null;
+    return localEntries.find(entry => entry.id === id || entry.id === validId) || null;
   },
 
   /**
@@ -156,7 +168,7 @@ export const storage = {
    */
   async saveEntry(entry, userId = null) {
     const now = new Date().toISOString();
-    const entryId = entry.id || crypto.randomUUID();
+    const entryId = ensureValidUUID(entry.id);
     const cleanTitle = (entry.title || getFormattedDateTime()).trim();
 
     if (isSupabaseConfigured && userId) {
@@ -183,8 +195,8 @@ export const storage = {
           .single();
 
         if (error) {
-          console.error('Supabase UPSERT error:', error);
-          return this.saveLocalEntry(entry);
+          console.error('Supabase UPSERT error:', error.message, error.details);
+          return this.saveLocalEntry({ ...entry, id: entryId });
         }
 
         const saved = {
@@ -201,27 +213,29 @@ export const storage = {
         return saved;
       } catch (err) {
         console.error('Supabase save exception:', err);
-        return this.saveLocalEntry(entry);
+        return this.saveLocalEntry({ ...entry, id: entryId });
       }
     }
 
-    return this.saveLocalEntry(entry);
+    return this.saveLocalEntry({ ...entry, id: entryId });
   },
 
   /**
    * Delete an entry by ID from Supabase Cloud.
    */
   async deleteEntry(id, userId = null) {
+    const validId = ensureValidUUID(id);
+
     if (isSupabaseConfigured && userId) {
       try {
         const { error } = await supabase
           .from('entries')
           .delete()
-          .eq('id', id)
+          .eq('id', validId)
           .eq('user_id', userId);
 
         if (error) {
-          console.error('Supabase delete error:', error);
+          console.error('Supabase delete error:', error.message);
         }
       } catch (err) {
         console.error('Supabase delete exception:', err);
@@ -229,6 +243,7 @@ export const storage = {
     }
 
     this.deleteLocalEntry(id);
+    this.deleteLocalEntry(validId);
   },
 
   /**
@@ -279,13 +294,15 @@ export const storage = {
 
   saveLocalEntry(entry) {
     const entries = this.getLocalEntries();
-    const index = entries.findIndex(e => e.id === entry.id);
+    const validId = ensureValidUUID(entry.id);
+    const index = entries.findIndex(e => e.id === entry.id || e.id === validId);
     const now = new Date().toISOString();
     let savedEntry;
 
     if (index >= 0) {
       savedEntry = {
         ...entries[index],
+        id: validId,
         title: entry.title.trim(),
         content: entry.content,
         lastEditedAt: now
@@ -293,7 +310,7 @@ export const storage = {
       entries[index] = savedEntry;
     } else {
       savedEntry = {
-        id: entry.id || crypto.randomUUID(),
+        id: validId,
         title: (entry.title || getFormattedDateTime()).trim(),
         content: entry.content || '',
         createdAt: entry.createdAt || now,
