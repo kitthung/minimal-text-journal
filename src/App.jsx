@@ -57,7 +57,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch entries and subscribe to Realtime cloud updates across devices
+  // Fetch entries, subscribe to Realtime cloud updates, and handle window focus/visibility changes
   useEffect(() => {
     if (loadingAuth) return;
 
@@ -78,9 +78,21 @@ export default function App() {
       loadEntries();
     });
 
+    // Auto-fetch fresh entries when mobile tab becomes active or gains focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadEntries();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', loadEntries);
+
     return () => {
       isMounted = false;
       unsubscribe();
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', loadEntries);
     };
   }, [userId, loadingAuth]);
 

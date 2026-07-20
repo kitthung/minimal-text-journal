@@ -34,9 +34,8 @@ Welcome! This is a responsive, distraction-free environment for your thoughts.
 
 Here are the key features:
 * **Cloud Sync**: All your entries automatically synchronize in real-time across your desktop and mobile devices.
-* **Typographic Focus**: Styled with \`Roboto Mono\` and soft neutral color schemes.
+* **Typographic Focus**: Choose between \`Roboto Mono\` and \`Galaxie Copernicus\`.
 * **Smart Search**: Real-time weighted search prioritizing titles first, then content body.
-* **Stats UI**: Unobtrusive live word and character counters at the bottom of the editor.
 
 To create a new entry, click the **+** button.`,
     createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
@@ -46,14 +45,15 @@ To create a new entry, click the **+** button.`,
 
 export const storage = {
   /**
-   * Asynchronous fetch of all journal entries.
+   * Asynchronous fetch of all journal entries from Supabase Cloud.
    */
   async getAllEntries(userId = null) {
     if (isSupabaseConfigured && userId) {
       try {
-        // Sync any pending local entries to cloud first
+        // 1. Sync any offline/local entries to cloud first
         await this.syncLocalEntriesToCloud(userId);
 
+        // 2. Fetch fresh entries from Supabase Cloud
         const { data, error } = await supabase
           .from('entries')
           .select('*')
@@ -65,7 +65,7 @@ export const storage = {
           return this.getLocalEntries();
         }
 
-        return (data || []).map(row => ({
+        const cloudEntries = (data || []).map(row => ({
           id: row.id,
           userId: row.user_id,
           title: row.title,
@@ -73,6 +73,13 @@ export const storage = {
           createdAt: row.created_at,
           lastEditedAt: row.last_edited_at
         }));
+
+        // Update local cache for offline reading capability
+        if (cloudEntries.length > 0) {
+          this.saveAllLocalEntries(cloudEntries);
+        }
+
+        return cloudEntries;
       } catch (err) {
         console.error('Failed fetching entries from cloud:', err);
         return this.getLocalEntries();
@@ -83,14 +90,13 @@ export const storage = {
   },
 
   /**
-   * Uploads any entries stored in localStorage to Supabase Cloud under the logged-in user.
+   * Uploads any entries stored in localStorage to Supabase Cloud.
    */
   async syncLocalEntriesToCloud(userId) {
     if (!isSupabaseConfigured || !userId) return;
 
     try {
       const localEntries = this.getLocalEntries();
-      // Filter out default sample entry if cloud already has entries
       const entriesToUpload = localEntries.filter(e => e.id !== 'sample-entry-1');
 
       if (entriesToUpload.length === 0) return;
@@ -105,9 +111,8 @@ export const storage = {
       }));
 
       const { error } = await supabase.from('entries').upsert(payloads);
-      if (!error) {
-        // Clear pushed local entries to avoid duplicated sync
-        localStorage.removeItem(STORAGE_KEY);
+      if (error) {
+        console.error('Error uploading local entries to cloud:', error);
       }
     } catch (err) {
       console.error('Failed syncing local entries to cloud:', err);
@@ -118,8 +123,32 @@ export const storage = {
    * Fetch a single entry by ID.
    */
   async getEntryById(id, userId = null) {
-    const entries = await this.getAllEntries(userId);
-    return entries.find(entry => entry.id === id) || null;
+    if (isSupabaseConfigured && userId) {
+      try {
+        const { data, error } = await supabase
+          .from('entries')
+          .select('*')
+          .eq('id', id)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!error && data) {
+          return {
+            id: data.id,
+            userId: data.user_id,
+            title: data.title,
+            content: data.content,
+            createdAt: data.created_at,
+            lastEditedAt: data.last_edited_at
+          };
+        }
+      } catch (err) {
+        console.error('Failed fetching single entry from cloud:', err);
+      }
+    }
+
+    const localEntries = this.getLocalEntries();
+    return localEntries.find(entry => entry.id === id) || null;
   },
 
   /**
@@ -132,12 +161,18 @@ export const storage = {
 
     if (isSupabaseConfigured && userId) {
       try {
+        let createdAt = entry.createdAt;
+        if (!createdAt) {
+          const existing = await this.getEntryById(entryId, userId);
+          createdAt = existing?.createdAt || now;
+        }
+
         const payload = {
           id: entryId,
           user_id: userId,
           title: cleanTitle,
           content: entry.content || '',
-          created_at: entry.createdAt || now,
+          created_at: createdAt,
           last_edited_at: now
         };
 
@@ -152,7 +187,7 @@ export const storage = {
           return this.saveLocalEntry(entry);
         }
 
-        return {
+        const saved = {
           id: data.id,
           userId: data.user_id,
           title: data.title,
@@ -160,6 +195,10 @@ export const storage = {
           createdAt: data.created_at,
           lastEditedAt: data.last_edited_at
         };
+
+        // Mirror to local cache
+        this.saveLocalEntry(saved);
+        return saved;
       } catch (err) {
         console.error('Supabase save exception:', err);
         return this.saveLocalEntry(entry);
@@ -208,11 +247,14 @@ export const storage = {
           table: 'entries',
           filter: `user_id=eq.${userId}`
         },
-        () => {
+        (payload) => {
+          console.log('Realtime change received from cloud:', payload);
           onUpdate();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime channel status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
