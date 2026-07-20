@@ -2,7 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, Bold, Italic, Heading, Eye, Edit2, Trash2 } from 'lucide-react';
 import { marked } from 'marked';
 
-// Bidirectional HTML to Markdown parser using DOM-traversal
+// Configure marked to preserve single and double line breaks
+marked.setOptions({
+  breaks: true,
+  gfm: true
+});
+
+// Bidirectional HTML to Markdown parser preserving precise line breaks
 const htmlToMarkdown = (html) => {
   if (!html) return '';
   
@@ -24,11 +30,11 @@ const htmlToMarkdown = (html) => {
 
     switch (node.nodeName) {
       case 'H1':
-        return `\n# ${childContent.trim()}\n\n`;
+        return `# ${childContent.trim()}\n\n`;
       case 'H2':
-        return `\n## ${childContent.trim()}\n\n`;
+        return `## ${childContent.trim()}\n\n`;
       case 'H3':
-        return `\n### ${childContent.trim()}\n\n`;
+        return `### ${childContent.trim()}\n\n`;
       case 'STRONG':
       case 'B':
         return `**${childContent}**`;
@@ -44,29 +50,26 @@ const htmlToMarkdown = (html) => {
         return `* ${childContent}\n`;
       }
       case 'UL':
-        return `\n${childContent}\n`;
       case 'OL':
         return `\n${childContent}\n`;
       case 'P':
-        return `\n${childContent.trim()}\n\n`;
       case 'DIV':
-        return `\n${childContent}\n`;
+        if (childContent === '' || childContent === '\n') {
+          return '\n';
+        }
+        return `${childContent}\n`;
       case 'BR':
         return '\n';
       case 'CODE':
         return `\`${childContent}\``;
       case 'PRE':
-        return `\n\`\`\`\n${childContent}\n\`\`\`\n\n`;
+        return `\`\`\`\n${childContent}\n\`\`\`\n\n`;
       default:
         return childContent;
     }
   };
 
-  const rawMarkdown = traverse(doc.body);
-  
-  return rawMarkdown
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return traverse(doc.body);
 };
 
 const markdownToHtml = (markdown) => {
