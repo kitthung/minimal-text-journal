@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Sliders, User, KeyRound, Loader2, CheckCircle2, LogOut, Check } from 'lucide-react';
+import { ChevronLeft, Sliders, User, KeyRound, Loader2, CheckCircle2, LogOut, Check, RefreshCw, Cloud } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { storage } from '../services/storage';
 
 export default function SettingsView({ user, activeFont, onSelectFont, onBack, onSignOut }) {
   const [activeTab, setActiveTab] = useState('general'); // 'general' | 'profile'
@@ -11,6 +12,11 @@ export default function SettingsView({ user, activeFont, onSelectFont, onBack, o
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState('');
+  const [syncErrorMsg, setSyncErrorMsg] = useState('');
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
@@ -43,6 +49,21 @@ export default function SettingsView({ user, activeFont, onSelectFont, onBack, o
       setErrorMsg(err.message || 'Failed to update password. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleManualSync = async () => {
+    setSyncing(true);
+    setSyncStatusMsg('');
+    setSyncErrorMsg('');
+
+    const res = await storage.syncLocalEntriesToCloud(user?.id);
+    setSyncing(false);
+
+    if (res.success) {
+      setSyncStatusMsg(res.message || 'Cloud sync complete!');
+    } else {
+      setSyncErrorMsg(res.error || 'Failed to sync entries to cloud.');
     }
   };
 
@@ -178,6 +199,55 @@ export default function SettingsView({ user, activeFont, onSelectFont, onBack, o
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, wordBreak: 'break-all' }}>
                   {user?.email}
                 </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  UID: {user?.id}
+                </div>
+              </div>
+
+              {/* Cloud Sync Manual Trigger */}
+              <div style={{ marginBottom: '2rem', padding: '1.25rem', border: '1px solid var(--border-color)', borderRadius: '10px', backgroundColor: 'var(--bg-color)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <Cloud className="w-4 h-4" />
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Cloud Database Sync</h3>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                  If you created entries while offline or on another device, click below to force push local entries to your cloud database.
+                </p>
+
+                {syncStatusMsg && (
+                  <div style={{ padding: '0.65rem 0.85rem', backgroundColor: 'rgba(46, 204, 113, 0.1)', border: '1px solid rgba(46, 204, 113, 0.3)', color: '#2ecc71', borderRadius: '6px', fontSize: '0.8rem', marginBottom: '0.85rem' }}>
+                    {syncStatusMsg}
+                  </div>
+                )}
+
+                {syncErrorMsg && (
+                  <div style={{ padding: '0.65rem 0.85rem', backgroundColor: 'rgba(231, 76, 60, 0.1)', border: '1px solid rgba(231, 76, 60, 0.3)', color: '#e74c3c', borderRadius: '6px', fontSize: '0.8rem', marginBottom: '0.85rem' }}>
+                    {syncErrorMsg}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={syncing}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.65rem 1rem',
+                    backgroundColor: 'var(--accent-light)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-color)',
+                    borderRadius: '6px',
+                    fontFamily: 'var(--font-app)',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  <span>Sync Local Entries Now</span>
+                </button>
               </div>
 
               <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem' }}>Change Password</h3>

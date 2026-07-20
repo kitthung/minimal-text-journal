@@ -64,8 +64,6 @@ export const storage = {
   async getAllEntries(userId = null) {
     if (isSupabaseConfigured && userId) {
       try {
-        await this.syncLocalEntriesToCloud(userId);
-
         const { data, error } = await supabase
           .from('entries')
           .select('*')
@@ -78,7 +76,6 @@ export const storage = {
           return this.getLocalEntries();
         }
 
-        // Clear previous error on success
         if (syncErrorCallback) syncErrorCallback(null);
 
         const cloudEntries = (data || []).map(row => ({
@@ -106,22 +103,26 @@ export const storage = {
   },
 
   /**
-   * Uploads any entries stored in localStorage to Supabase Cloud.
+   * Uploads local entries to Supabase Cloud and returns upload results.
    */
   async syncLocalEntriesToCloud(userId) {
-    if (!isSupabaseConfigured || !userId) return;
+    if (!isSupabaseConfigured || !userId) {
+      return { success: false, count: 0, error: 'Supabase credentials or User session missing.' };
+    }
 
     try {
       const localEntries = this.getLocalEntries();
       const entriesToUpload = localEntries.filter(e => e.id !== 'e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c' && e.id !== 'sample-entry-1');
 
-      if (entriesToUpload.length === 0) return;
+      if (entriesToUpload.length === 0) {
+        return { success: true, count: 0, message: 'No pending local entries to sync.' };
+      }
 
       const payloads = entriesToUpload.map(e => ({
         id: ensureValidUUID(e.id),
         user_id: userId,
         title: e.title,
-        content: e.content,
+        content: e.content || '',
         created_at: e.createdAt || new Date().toISOString(),
         last_edited_at: e.lastEditedAt || new Date().toISOString()
       }));
@@ -130,9 +131,15 @@ export const storage = {
       if (error) {
         console.error('Error uploading local entries to cloud:', error);
         if (syncErrorCallback) syncErrorCallback(error.message);
+        return { success: false, count: 0, error: error.message };
       }
+
+      if (syncErrorCallback) syncErrorCallback(null);
+      return { success: true, count: entriesToUpload.length, message: `Successfully pushed ${entriesToUpload.length} entries to cloud!` };
     } catch (err) {
       console.error('Failed syncing local entries to cloud:', err);
+      if (syncErrorCallback) syncErrorCallback(err.message);
+      return { success: false, count: 0, error: err.message };
     }
   },
 
@@ -178,6 +185,13 @@ export const storage = {
     const entryId = ensureValidUUID(entry.id);
     const cleanTitle = (entry.title || getFormattedDateTime()).trim();
 
+    const savedLocal = this.saveLocalEntry({
+      ...entry,
+      id: entryId,
+      title: cleanTitle,
+      lastEditedAt: now
+    });
+
     if (isSupabaseConfigured && userId) {
       try {
         let createdAt = entry.createdAt;
@@ -195,39 +209,34 @@ export const storage = {
           last_edited_at: now
         };
 
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('entries')
-          .upsert(payload)
-          .select()
-          .single();
+          .upsert(payload);
 
         if (error) {
-          console.error('Supabase UPSERT error:', error);
+          console.error('Supabase UPSERT error:', error.message, error.details);
           if (syncErrorCallback) syncErrorCallback(error.message);
-          return this.saveLocalEntry({ ...entry, id: entryId });
+          return savedLocal;
         }
 
         if (syncErrorCallback) syncErrorCallback(null);
 
-        const saved = {
-          id: data.id,
-          userId: data.user_id,
-          title: data.title,
-          content: data.content,
-          createdAt: data.created_at,
-          lastEditedAt: data.last_edited_at
+        return {
+          id: entryId,
+          userId: userId,
+          title: cleanTitle,
+          content: entry.content || '',
+          createdAt: createdAt,
+          lastEditedAt: now
         };
-
-        this.saveLocalEntry(saved);
-        return saved;
       } catch (err) {
         console.error('Supabase save exception:', err);
         if (syncErrorCallback) syncErrorCallback(err.message);
-        return this.saveLocalEntry({ ...entry, id: entryId });
+        return savedLocal;
       }
     }
 
-    return this.saveLocalEntry({ ...entry, id: entryId });
+    return savedLocal;
   },
 
   /**
@@ -314,8 +323,8 @@ export const storage = {
       savedEntry = {
         ...entries[index],
         id: validId,
-        title: entry.title.trim(),
-        content: entry.content,
+        title: (entry.title || getFormattedDateTime()).trim(),
+        content: entry.content || '',
         lastEditedAt: now
       };
       entries[index] = savedEntry;
