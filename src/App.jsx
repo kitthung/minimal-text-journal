@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, BookOpen, LogOut, User } from 'lucide-react';
+import { Plus, BookOpen, Settings } from 'lucide-react';
 import { storage, getFormattedDateTime } from './services/storage';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import ThemeToggle from './components/ThemeToggle';
@@ -7,17 +7,31 @@ import SearchBox from './components/SearchBox';
 import EntryList from './components/EntryList';
 import Editor from './components/Editor';
 import AuthGate from './components/AuthGate';
-import ProfileView from './components/ProfileView';
+import SettingsView from './components/SettingsView';
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(isSupabaseConfigured);
   const [entries, setEntries] = useState([]);
-  const [currentView, setCurrentView] = useState('home'); // 'home' | 'edit' | 'profile'
+  const [currentView, setCurrentView] = useState('home'); // 'home' | 'edit' | 'settings'
   const [activeEntryId, setActiveEntryId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFont, setActiveFont] = useState('roboto-mono');
 
   const userId = session?.user?.id || null;
+
+  // Restore font preference on app launch
+  useEffect(() => {
+    const savedFont = localStorage.getItem('journal_font_preference') || 'roboto-mono';
+    setActiveFont(savedFont);
+    document.documentElement.setAttribute('data-font', savedFont);
+  }, []);
+
+  const handleSelectFont = (fontKey) => {
+    setActiveFont(fontKey);
+    localStorage.setItem('journal_font_preference', fontKey);
+    document.documentElement.setAttribute('data-font', fontKey);
+  };
 
   // Supabase Auth listener
   useEffect(() => {
@@ -63,9 +77,9 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = async () => {
       const hash = window.location.hash;
-      if (hash === '#/profile') {
+      if (hash === '#/settings') {
         setActiveEntryId(null);
-        setCurrentView('profile');
+        setCurrentView('settings');
       } else if (hash.startsWith('#/edit/')) {
         const id = hash.replace('#/edit/', '');
         const entryExists = await storage.getEntryById(id, userId);
@@ -127,8 +141,8 @@ export default function App() {
     window.location.hash = '#/';
   };
 
-  const handleGoToProfile = () => {
-    window.location.hash = '#/profile';
+  const handleGoToSettings = () => {
+    window.location.hash = '#/settings';
   };
 
   const handleSignOut = async () => {
@@ -142,7 +156,7 @@ export default function App() {
   if (loadingAuth) {
     return (
       <div className="app-container flex justify-center items-center h-screen">
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Loading session...</p>
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-app)' }}>Loading session...</p>
       </div>
     );
   }
@@ -178,23 +192,12 @@ export default function App() {
 
             {session && (
               <button
-                onClick={handleGoToProfile}
+                onClick={handleGoToSettings}
                 className="btn-icon"
-                aria-label="Account profile settings"
-                title={`Account Profile (${session.user.email})`}
+                aria-label="Application Settings"
+                title="Settings (General & Profile)"
               >
-                <User className="w-4 h-4" />
-              </button>
-            )}
-
-            {isSupabaseConfigured && session && (
-              <button
-                onClick={handleSignOut}
-                className="btn-icon"
-                aria-label="Sign out"
-                title={`Signed in as ${session.user.email} (Click to Sign Out)`}
-              >
-                <LogOut className="w-4 h-4" />
+                <Settings className="w-4 h-4" />
               </button>
             )}
 
@@ -213,9 +216,11 @@ export default function App() {
               onSelectEntry={handleSelectEntry} 
             />
           </div>
-        ) : currentView === 'profile' ? (
-          <ProfileView 
+        ) : currentView === 'settings' ? (
+          <SettingsView 
             user={session.user} 
+            activeFont={activeFont}
+            onSelectFont={handleSelectFont}
             onBack={handleBackToTimeline} 
             onSignOut={handleSignOut} 
           />
