@@ -1,9 +1,19 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, BarChart2, FileText, Type, AlignLeft, Calendar } from 'lucide-react';
+import { ChevronLeft, BarChart2, FileText, Type, AlignLeft } from 'lucide-react';
 
 const countWords = (text) => {
   if (!text) return 0;
   return text.trim().split(/\s+/).filter(Boolean).length;
+};
+
+// Formats a Date object into a local 'YYYY-MM-DD' string to avoid UTC conversion shifts
+const getLocalDateString = (dateObj) => {
+  if (!dateObj) return '';
+  const date = new Date(dateObj);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 export default function DashboardView({ entries = [], onBack }) {
@@ -14,25 +24,26 @@ export default function DashboardView({ entries = [], onBack }) {
     const now = new Date();
 
     if (dimension === 'weekly') {
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const filteredEntries = entries.filter(e => new Date(e.createdAt || e.lastEditedAt) >= sevenDaysAgo);
+      // Start of 6 days ago (00:00:00 local time)
+      const startOfPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+      const filteredEntries = entries.filter(e => new Date(e.createdAt || e.lastEditedAt) >= startOfPeriod);
 
       // Generate 7 day buckets (from 6 days ago to today)
       const buckets = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const dayStr = d.toISOString().split('T')[0];
+        const dayStr = getLocalDateString(d);
         const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
         
         const dayEntries = filteredEntries.filter(e => {
-          const eDate = new Date(e.createdAt || e.lastEditedAt).toISOString().split('T')[0];
-          return eDate === dayStr;
+          const eDateStr = getLocalDateString(e.createdAt || e.lastEditedAt);
+          return eDateStr === dayStr;
         });
 
         const words = dayEntries.reduce((sum, e) => sum + countWords(e.content), 0);
         buckets.push({
           label: dayLabel,
-          subLabel: d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
+          subLabel: `${d.getMonth() + 1}/${d.getDate()}`,
           words,
           notes: dayEntries.length
         });
