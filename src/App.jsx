@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, BookOpen, Settings } from 'lucide-react';
-import { storage, getFormattedDateTime } from './services/storage';
+import { storage, getFormattedDateTime, setSyncErrorCallback } from './services/storage';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import ThemeToggle from './components/ThemeToggle';
 import SearchBox from './components/SearchBox';
@@ -17,8 +17,16 @@ export default function App() {
   const [activeEntryId, setActiveEntryId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFont, setActiveFont] = useState('roboto-mono');
+  const [syncError, setSyncError] = useState(null);
 
   const userId = session?.user?.id || null;
+
+  // Listen to storage sync errors
+  useEffect(() => {
+    setSyncErrorCallback((errMsg) => {
+      setSyncError(errMsg);
+    });
+  }, []);
 
   // Restore font preference on app launch
   useEffect(() => {
@@ -193,6 +201,12 @@ export default function App() {
 
   return (
     <>
+      {syncError && (
+        <div style={{ padding: '0.65rem 1rem', backgroundColor: 'rgba(231, 76, 60, 0.95)', color: '#fff', fontSize: '0.8rem', textAlign: 'center', fontWeight: 600 }}>
+          ⚠️ Cloud Sync Warning: {syncError}
+        </div>
+      )}
+
       <header className="app-header">
         <div className="header-content">
           <a href="#/" className="brand" onClick={handleBackToTimeline}>

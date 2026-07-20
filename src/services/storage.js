@@ -2,6 +2,11 @@ import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const STORAGE_KEY = 'minimalist_journal_entries';
 
+let syncErrorCallback = null;
+export const setSyncErrorCallback = (cb) => {
+  syncErrorCallback = cb;
+};
+
 // Helper to ensure all entry IDs are strictly valid v4 UUIDs required by PostgreSQL
 export const ensureValidUUID = (id) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -59,10 +64,8 @@ export const storage = {
   async getAllEntries(userId = null) {
     if (isSupabaseConfigured && userId) {
       try {
-        // 1. Sync any local entries to cloud first
         await this.syncLocalEntriesToCloud(userId);
 
-        // 2. Fetch fresh entries from Supabase Cloud
         const { data, error } = await supabase
           .from('entries')
           .select('*')
@@ -70,9 +73,13 @@ export const storage = {
           .order('last_edited_at', { ascending: false });
 
         if (error) {
-          console.error('Supabase fetch entries error:', error.message, error.details);
+          console.error('Supabase fetch entries error:', error);
+          if (syncErrorCallback) syncErrorCallback(error.message || 'Failed to fetch entries from cloud');
           return this.getLocalEntries();
         }
+
+        // Clear previous error on success
+        if (syncErrorCallback) syncErrorCallback(null);
 
         const cloudEntries = (data || []).map(row => ({
           id: row.id,
@@ -83,7 +90,6 @@ export const storage = {
           lastEditedAt: row.last_edited_at
         }));
 
-        // Mirror cloud entries into local cache for offline reading capability
         if (cloudEntries.length > 0) {
           this.saveAllLocalEntries(cloudEntries);
         }
@@ -91,6 +97,7 @@ export const storage = {
         return cloudEntries;
       } catch (err) {
         console.error('Failed fetching entries from cloud:', err);
+        if (syncErrorCallback) syncErrorCallback(err.message);
         return this.getLocalEntries();
       }
     }
@@ -106,7 +113,6 @@ export const storage = {
 
     try {
       const localEntries = this.getLocalEntries();
-      // Filter out default sample entry if cloud sync is active
       const entriesToUpload = localEntries.filter(e => e.id !== 'e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c' && e.id !== 'sample-entry-1');
 
       if (entriesToUpload.length === 0) return;
@@ -122,7 +128,8 @@ export const storage = {
 
       const { error } = await supabase.from('entries').upsert(payloads);
       if (error) {
-        console.error('Error uploading local entries to cloud:', error.message, error.details);
+        console.error('Error uploading local entries to cloud:', error);
+        if (syncErrorCallback) syncErrorCallback(error.message);
       }
     } catch (err) {
       console.error('Failed syncing local entries to cloud:', err);
@@ -195,9 +202,12 @@ export const storage = {
           .single();
 
         if (error) {
-          console.error('Supabase UPSERT error:', error.message, error.details);
+          console.error('Supabase UPSERT error:', error);
+          if (syncErrorCallback) syncErrorCallback(error.message);
           return this.saveLocalEntry({ ...entry, id: entryId });
         }
+
+        if (syncErrorCallback) syncErrorCallback(null);
 
         const saved = {
           id: data.id,
@@ -208,11 +218,11 @@ export const storage = {
           lastEditedAt: data.last_edited_at
         };
 
-        // Mirror to local cache
         this.saveLocalEntry(saved);
         return saved;
       } catch (err) {
         console.error('Supabase save exception:', err);
+        if (syncErrorCallback) syncErrorCallback(err.message);
         return this.saveLocalEntry({ ...entry, id: entryId });
       }
     }
@@ -235,7 +245,8 @@ export const storage = {
           .eq('user_id', userId);
 
         if (error) {
-          console.error('Supabase delete error:', error.message);
+          console.error('Supabase delete error:', error);
+          if (syncErrorCallback) syncErrorCallback(error.message);
         }
       } catch (err) {
         console.error('Supabase delete exception:', err);
