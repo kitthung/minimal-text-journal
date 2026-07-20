@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, BookOpen, Settings } from 'lucide-react';
+import { Plus, BookOpen, Settings, BarChart2 } from 'lucide-react';
 import { storage, getFormattedDateTime, setSyncErrorCallback } from './services/storage';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import ThemeToggle from './components/ThemeToggle';
@@ -8,12 +8,13 @@ import EntryList from './components/EntryList';
 import Editor from './components/Editor';
 import AuthGate from './components/AuthGate';
 import SettingsView from './components/SettingsView';
+import DashboardView from './components/DashboardView';
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(isSupabaseConfigured);
   const [entries, setEntries] = useState([]);
-  const [currentView, setCurrentView] = useState('home'); // 'home' | 'edit' | 'settings'
+  const [currentView, setCurrentView] = useState('home'); // 'home' | 'edit' | 'settings' | 'dashboard'
   const [activeEntryId, setActiveEntryId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFont, setActiveFont] = useState('roboto-mono');
@@ -111,6 +112,9 @@ export default function App() {
       if (hash === '#/settings') {
         setActiveEntryId(null);
         setCurrentView('settings');
+      } else if (hash === '#/dashboard') {
+        setActiveEntryId(null);
+        setCurrentView('dashboard');
       } else if (hash.startsWith('#/edit/')) {
         const id = hash.replace('#/edit/', '');
         const entryExists = await storage.getEntryById(id, userId);
@@ -176,6 +180,10 @@ export default function App() {
     window.location.hash = '#/settings';
   };
 
+  const handleGoToDashboard = () => {
+    window.location.hash = '#/dashboard';
+  };
+
   const handleSignOut = async () => {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
@@ -228,14 +236,25 @@ export default function App() {
             )}
 
             {session && (
-              <button
-                onClick={handleGoToSettings}
-                className="btn-icon"
-                aria-label="Application Settings"
-                title="Settings (General & Profile)"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
+              <>
+                <button
+                  onClick={handleGoToDashboard}
+                  className="btn-icon"
+                  aria-label="Writing Analytics Dashboard"
+                  title="Writing Analytics"
+                >
+                  <BarChart2 className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={handleGoToSettings}
+                  className="btn-icon"
+                  aria-label="Application Settings"
+                  title="Settings (General & Profile)"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </>
             )}
 
             <ThemeToggle />
@@ -260,6 +279,11 @@ export default function App() {
             onSelectFont={handleSelectFont}
             onBack={handleBackToTimeline} 
             onSignOut={handleSignOut} 
+          />
+        ) : currentView === 'dashboard' ? (
+          <DashboardView 
+            entries={entries} 
+            onBack={handleBackToTimeline} 
           />
         ) : (
           activeEntry && (
