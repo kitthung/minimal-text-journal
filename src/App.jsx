@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, BookOpen, LogOut } from 'lucide-react';
+import { Plus, BookOpen, LogOut, User } from 'lucide-react';
 import { storage, getFormattedDateTime } from './services/storage';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import ThemeToggle from './components/ThemeToggle';
@@ -7,6 +7,7 @@ import SearchBox from './components/SearchBox';
 import EntryList from './components/EntryList';
 import Editor from './components/Editor';
 import AuthGate from './components/AuthGate';
+import ProfileModal from './components/ProfileModal';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -15,6 +16,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState('home'); // 'home' | 'edit'
   const [activeEntryId, setActiveEntryId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const userId = session?.user?.id || null;
 
@@ -168,6 +170,17 @@ export default function App() {
               </button>
             )}
 
+            {session && (
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="btn-icon"
+                aria-label="Account profile settings"
+                title={`Profile Settings (${session.user.email})`}
+              >
+                <User className="w-4 h-4" />
+              </button>
+            )}
+
             {isSupabaseConfigured && session && (
               <button
                 onClick={handleSignOut}
@@ -216,6 +229,14 @@ export default function App() {
         >
           <Plus className="w-6 h-6" />
         </button>
+      )}
+
+      {/* User Profile Modal */}
+      {showProfileModal && (
+        <ProfileModal 
+          user={session.user} 
+          onClose={() => setShowProfileModal(false)} 
+        />
       )}
     </>
   );

@@ -3,7 +3,7 @@ import { BookOpen, KeyRound, Mail, ArrowRight, Loader2, AlertCircle } from 'luci
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 export default function AuthGate() {
-  const [isSignUp, setIsSignUp] = useState(true); // Default to Sign Up for new users
+  const [isSignUp, setIsSignUp] = useState(false); // Default to Sign In screen
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,9 +18,15 @@ export default function AuthGate() {
 
     try {
       if (isSignUp) {
+        // Dynamically compute current site origin to guarantee confirmation email links match the worker domain
+        const redirectUrl = window.location.origin + window.location.pathname;
+        
         const { data, error } = await supabase.auth.signUp({
           email,
-          password
+          password,
+          options: {
+            emailRedirectTo: redirectUrl
+          }
         });
         if (error) throw error;
         
