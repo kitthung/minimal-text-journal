@@ -2,13 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, Bold, Italic, Heading, Eye, Edit2, Trash2 } from 'lucide-react';
 import { marked } from 'marked';
 
-// Configure marked to preserve single and double line breaks
-marked.setOptions({
+// Configure marked to preserve exact raw text, line breaks, and disable list auto-conversion
+marked.use({
   breaks: true,
-  gfm: true
+  gfm: true,
+  tokenizer: {
+    list() {
+      // Disable list parsing to prevent renumbering or collapsing line breaks
+      return undefined;
+    }
+  }
 });
 
-// Bidirectional HTML to Markdown parser preserving precise line breaks
+// Bidirectional HTML to Markdown parser preserving precise line breaks and verbatim user text
 const htmlToMarkdown = (html) => {
   if (!html) return '';
   
@@ -41,24 +47,6 @@ const htmlToMarkdown = (html) => {
       case 'EM':
       case 'I':
         return `*${childContent}*`;
-      case 'LI': {
-        const parent = node.parentNode;
-        const cleanContent = childContent.replace(/^\n+|\n+$/g, '').trim();
-        if (parent && parent.nodeName === 'OL') {
-          const index = Array.from(parent.children).indexOf(node) + 1;
-          return `${index}. ${cleanContent}\n`;
-        }
-        return `* ${cleanContent}\n`;
-      }
-      case 'UL':
-      case 'OL': {
-        const listLines = childContent
-          .split('\n')
-          .map(line => line.trim())
-          .filter(Boolean)
-          .join('\n');
-        return `\n${listLines}\n\n`;
-      }
       case 'P':
       case 'DIV':
         if (childContent === '' || childContent === '\n') {
@@ -67,6 +55,11 @@ const htmlToMarkdown = (html) => {
         return `${childContent}\n`;
       case 'BR':
         return '\n';
+      case 'LI':
+        return `${childContent}\n`;
+      case 'UL':
+      case 'OL':
+        return `${childContent}`;
       case 'CODE':
         return `\`${childContent}\``;
       case 'PRE':
