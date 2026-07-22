@@ -485,12 +485,25 @@ html, body {
   margin-bottom: 1rem;
 }
 
+.textarea-field ul,
+.markdown-preview ul {
+  list-style-type: disc;
+}
+
+.textarea-field ol,
+.markdown-preview ol {
+  list-style-type: decimal;
+}
+
+.textarea-field ul,
+.textarea-field ol,
 .markdown-preview ul,
 .markdown-preview ol {
   margin-bottom: 1rem;
-  padding-left: 1.5rem;
+  padding-left: 1.75rem;
 }
 
+.textarea-field li,
 .markdown-preview li {
   margin-bottom: 0.35rem;
 }
