@@ -43,15 +43,22 @@ const htmlToMarkdown = (html) => {
         return `*${childContent}*`;
       case 'LI': {
         const parent = node.parentNode;
+        const cleanContent = childContent.replace(/^\n+|\n+$/g, '').trim();
         if (parent && parent.nodeName === 'OL') {
           const index = Array.from(parent.children).indexOf(node) + 1;
-          return `${index}. ${childContent}\n`;
+          return `${index}. ${cleanContent}\n`;
         }
-        return `* ${childContent}\n`;
+        return `* ${cleanContent}\n`;
       }
       case 'UL':
-      case 'OL':
-        return `\n${childContent}\n`;
+      case 'OL': {
+        const listLines = childContent
+          .split('\n')
+          .map(line => line.trim())
+          .filter(Boolean)
+          .join('\n');
+        return `\n${listLines}\n\n`;
+      }
       case 'P':
       case 'DIV':
         if (childContent === '' || childContent === '\n') {

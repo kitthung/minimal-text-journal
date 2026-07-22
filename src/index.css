@@ -501,11 +501,13 @@ html, body {
 .markdown-preview ol {
   margin-bottom: 1rem;
   padding-left: 1.75rem;
+  white-space: normal;
 }
 
 .textarea-field li,
 .markdown-preview li {
   margin-bottom: 0.35rem;
+  white-space: normal;
 }
 
 .markdown-preview blockquote {
